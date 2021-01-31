@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Euskalmeteo - Home</title>
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+    <!-- JQuery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <style>
+        body {
+            background-image: url("Images/Tierra.jpg");
+        }
+        #logout:hover {
+            color: black;
+        }
+        .accordion-header:hover {
+            background-color: #e7f1ff;
+        }
+        .accordion-body {
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+        small {
+            font-size: x-small;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="home.html">
+                <img src="Images/Icon.png" alt="" width="30" class="d-inline-block align-top">
+                Euskalmeteo
+            </a>
+            <a id="logout" class="navbar-text font-weight-lighter" style="text-decoration: none" href="#">Cerrar sesión</a>
+        </div>
+    </nav>
+
+    <!-- Container -->    
+    <div class="container-fluid">      
+        <div class="row justify-content-center">
+            <div class="col-12 text-center mt-5 mb-3">
+                <h2 id="title" class="text-white">Consulta la información de tu tiempo</h2>
+            </div>
+            <div class="col-6 mt-3">
+                <!-- abre una modal -->
+                <button id="btnMediciones" type="button" class="btn btn-warning btn-sm float-right mb-3">Editar mediciones favoritas</button>
+                <!-- va a map.html -->
+                <button id="btnBalizas" type="button" class="btn btn-warning btn-sm float-right mb-3">Editar balizas favoritas</button>
+                
+                <div class="accordion accordion-flush bg-light" id="accordion"></div>
+            </div>
+        </div>         
+    </div>  
+
+    <script>
+        // Request to know if the user is authenticated. If we are not authenticated, it sends us to 'error' site
+        $.ajax({
+            url: 'http://127.0.0.1:8000/api/auth',
+            type: 'GET',
+            headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+            beforeSend: function () {
+            },
+            success: function (respuesta) {
+                balizasFavoritas();
+            },
+            error: function(respuesta) {
+                window.location = "error.html";
+                console.log("No se ha podido obtener si el usuario tiene balizas y mediciones favoritas.");
+            },
+            dataType: 'json',
+            async: false
+        });
+
+        // Request to know if the user has already selected his/her favourite markers and meaurements
+        function balizasFavoritas() {
+            $.ajax({
+                url: 'http://127.0.0.1:8000/api/favourites',
+                type: 'GET',
+                headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+                beforeSend: function () {
+                },
+                success: function (respuesta) {
+                    if (!respuesta.hasFavouriteMarkers) {
+                        window.location = "map.html";
+                    } else if (!respuesta.hasFavouriteMeasurements) {
+                        window.location = "measurements.html";
+                    }
+                },
+                error: function(respuesta) {
+                    console.log("No se ha podido obtener si el usuario tiene balizas y mediciones favoritas.");
+                },
+                dataType: 'json',
+                async: false
+            });
+        }        
+
+        $(document).ready(function() {
+            let aMediciones;
+            // Request to get athenticated user's data
+            $.ajax({
+                url: 'http://127.0.0.1:8000/api/user',
+                type: 'GET',
+                headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+                beforeSend: function () {
+                },
+                success: function (respuesta) {
+                    $("#title").text(`¡Hola ${respuesta.name}! Consulta la información de tu tiempo`);
+                },
+                error: function(respuesta) {
+                    console.log("No se han podido obtener los datos del usuario");
+                },
+                dataType: 'json'
+            });
+
+            // Request to get all available measurements
+            $.ajax({
+                url: 'http://127.0.0.1:8000/api/measurements',
+                type: 'GET',
+                headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+                beforeSend: function () {
+                },
+                success: function (respuesta) {
+                    aMediciones = respuesta;
+                },
+                error: function(respuesta) {
+                    console.log("No se han podido obtener las mediciones disponibles.");
+                },
+                dataType: 'json'
+            });
+
+            // Request to get favourite markers data
+            $.ajax({
+                url: 'http://127.0.0.1:8000/api/markers/favourite',
+                type: 'GET',
+                headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+                beforeSend: function () {
+                },
+                success: function (respuesta) {
+                    createTable(respuesta, aMediciones);
+                },
+                error: function(respuesta) {
+                    console.log("No se han podido obtener las balizas favoritas.");
+                },
+                dataType: 'json'
+            });
+
+            // Every 30s it request favourite markers data
+            var iReloj = setInterval(Intervalo, 30000);
+
+            function Intervalo() {
+                updateFavouriteMarkers();
+            }
+
+            // Request to get user's favourite markers
+            function updateFavouriteMarkers() {
+                $.ajax({
+                    url: 'http://127.0.0.1:8000/api/markers/favourite',
+                    type: 'GET',
+                    headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+                    beforeSend: function () {
+                    },
+                    success: function (respuesta) {
+                        updateTable(respuesta, aMediciones);
+                    },
+                    error: function(respuesta) {
+                        console.log("No se han podido obtener las balizas favoritas.");
+                    },
+                    dataType: 'json'
+                });
+            }
+            
+
+            // On click "#btnBalizas" button, it takes us to 'map' site
+            $("#btnBalizas").on("click", function() {
+                event.preventDefault();
+                window.location = "map.html";                
+            })  
+
+            // On click "#btnMediciones" button, it takes us to 'measurements' site
+            $("#btnMediciones").on("click", function() {
+                event.preventDefault();
+                window.location = "measurements.html";                
+            }) 
+
+            // On click "#logout" button, it deletes users token and takes us to 'index' site
+            $("#logout").on("click", function() {
+                event.preventDefault();
+
+                $.ajax({
+                    url: 'http://127.0.0.1:8000/api/logout',
+                    type: 'POST',
+                    headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+                    beforeSend: function () {
+                    },
+                    success: function (respuesta) {
+                        sessionStorage.removeItem('token');
+                        window.location = "index.html";
+                    },
+                    error: function(respuesta) {
+                        console.log("MAL");
+                    },
+                    dataType: 'json'
+                });               
+            }) 
+        });
+
+        // Function to get the title of the measurements
+        function getMeasurementTitle(code, aMediciones) {
+            for(i=0; i<aMediciones.length; i++) {
+                if (code == aMediciones[i].code) {
+                    if (code == "irradiance") {
+                        return aMediciones[i].name + " (W/m<sup>2</sup>)";
+                    }
+                    return aMediciones[i].name + " (" + aMediciones[i].unit + (")");
+                }
+            }
+        }
+        
+        // Function to create the table with the favourite markers
+        function createTable(markers, aMediciones) {
+            for (let index = 0; index < markers.length; index++) {
+                sHeaders = "";
+                sData = "";
+                Object.keys(markers[index].measurements).forEach(function(key) {
+                    sHeaders += `<th class="px-2">${getMeasurementTitle(key, aMediciones)}</th>`;
+                    sData += (markers[index].measurements[key] == null) 
+                        ? `<td id="${key}${index}" class="px-2">-</td>` 
+                        : `<td id="${key}${index}" class="px-2">${markers[index].measurements[key].toFixed(2)}</td>`;
+                });
+
+                table = `<table class="table"><tr>${sHeaders}</tr><tr>${sData}</tr></table>`;
+                sItem = 
+                    `<div class="accordion-item">
+                    <h2 class="accordion-header" id="flush-heading${index}">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse${index}" aria-expanded="false" aria-controls="flush-collapse${index}">
+                            ${markers[index].name}
+                        </button>
+                    </h2>
+                    <div id="flush-collapse${index}" class="accordion-collapse collapse" aria-labelledby="flush-heading${index}" data-bs-parent="#accordion">
+                        <div class="accordion-body">                            
+                            ${table}
+                            <small id="small${index}" class="text-secondary">Última medición: ${markers[index].dt}</small>
+                        </div>
+                    </div>
+                    </div>`;
+
+                $("#accordion").append(sItem);
+            }
+        }
+
+        // Function to update the table with the favourite markers
+        function updateTable(markers, aMediciones) {
+            for (let index = 0; index < markers.length; index++) {
+                $(`#small${index}`).text(`Última medición: ${markers[index].dt}`);
+                Object.keys(markers[index].measurements).forEach(function(key) {
+                    (markers[index].measurements[key] == null) 
+                        ? $(`#${key}${index}`).text('-') 
+                        : $(`#${key}${index}`).text(`${markers[index].measurements[key].toFixed(2)}`);
+                });
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js" integrity="sha384-q2kxQ16AaE6UbzuKqyBE9/u/KzioAlnx2maXQHiDX9d4/zp8Ok3f+M7DPm+Ib6IU" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.min.js" integrity="sha384-pQQkAEnwaBkjpqZ8RU1fF1AKtTcHJwFl3pblpTlHXybJjHpMYo79HY3hIi4NKxyj" crossorigin="anonymous"></script>
+</body>
+</html>

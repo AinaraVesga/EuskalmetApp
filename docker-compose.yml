@@ -1,0 +1,52 @@
+version: '3'
+services: 
+  # Servicio api de laravel
+  myapi:
+    image: ainaravesga/laravel:5.0
+    container_name: laravelc
+    ports:
+      - 8000:8000
+    depends_on: 
+      - mydb
+    working_dir: /intermodular
+    # command: bash -c "* * * * * php artisan schedule:run >> /dev/null 2>&1"
+    command: bash -c "php artisan serve --host=0.0.0.0 --port=8000 && php artisan schedule:work"
+    # php artisan migrate && php artisan measurement:update && 
+
+  myfront:
+    image: python:3
+    container_name: frontc
+    ports:
+      - 80:80
+    depends_on: 
+      - mydb
+      - myapi
+    working_dir: /app
+    volumes: 
+      - ./appfront:/app
+    command: bash -c "python3 -m http.server 80"
+
+  # Servicio base de datos mysql
+  mydb:
+    image: mysql:8
+    container_name: mysqlc
+    ports: 
+      - 3306:3306
+    environment: 
+      MYSQL_DATABASE: euskalmet
+      MYSQL_ROOT_PASSWORD: 1234
+    volumes: 
+      - ./dbdata:/var/lib/mysql
+  
+  # Servicio frontend base de datos phpmyadmin
+  mydbadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadminc
+    ports:
+      - 8088:80
+    environment: 
+      MYSQL_ROOT_PASSWORD: 1234
+      PMA_HOST: mydb
+    depends_on: 
+      - mydb
+

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Euskalmeteo - Mediciones</title>
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+    <!-- JQuery -->
+    <link rel="stylesheet" href="http://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    <style>
+        body {
+            background-image: url("Images/Tierra.jpg");
+        }
+        .draggable {
+            width: 120px;
+            height: auto;
+            display: inline-block;
+            background-color: #FEF5BB;            
+            cursor: url(https://ssl.gstatic.com/ui/v1/icons/mail/images/2/openhand.cur), default !important;
+        }
+        .draggable:hover {
+            background-color: #FFED7A;
+        }
+        .vcenter-item{
+            display: flex;
+            align-items: center;
+        }
+        .border {
+            border-width:5px !important;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="home.html">
+                <img src="Images/Icon.png" alt="" width="30" class="d-inline-block align-top">
+                Euskalmeteo
+            </a>
+        </div>
+    </nav>
+
+    <!-- Container -->
+    <div class="container">      
+        <div class="row my-5">
+            <div class="col-12 text-center mt-5 mb-3">
+                <h2 class="text-white">Selecciona las mediciones que te interesen</h2>
+            </div>
+            <div class="col-12 d-flex justify-content-center">
+                <div class="row w-75">
+                    <div class="col-6">
+                        <div id="availables" class="container w-100 p-5 my-3 rounded border bg-light" style="height: 50vh;">
+                            <h5 class="mb-3">Disponibles</h5>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div id="selected" class="container w-100 p-5 my-3 rounded border bg-light" style="height: 50vh;">
+                            <h5 class="mb-3">Seleccionadas</h5>
+                            
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 text-center my-3">
+                <button id="continuar" type="submit" class="btn btn-primary my-4">Continuar</button>
+                <br>
+                <small id="response"></small>
+            </div>
+        </div>         
+    </div> 
+
+    <script>    
+        // Request to know if the user is authenticated. If we are not authenticated, it sends us to 'error' site
+        $.ajax({
+            url: 'http://127.0.0.1:8000/api/auth',
+            type: 'GET',
+            headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+            beforeSend: function () {
+            },
+            success: function (respuesta) {
+            },
+            error: function(respuesta) {
+                window.location = "error.html";
+                console.log("No se ha podido obtener si el usuario tiene balizas y mediciones favoritas.");
+            },
+            dataType: 'json',
+            async: false
+        }); 
+
+        // Array where favourite measurements will save temporary
+        var aSeleccion = [];        
+
+        $(document).ready(function() {
+            // Request to get all available measurements and create them
+            $.ajax({
+                url: 'http://127.0.0.1:8000/api/measurements',
+                type: 'GET',
+                headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+                beforeSend: function () {
+                },
+                success: function (respuesta) {
+                    crearMediciones(respuesta);
+                },
+                error: function(respuesta) {
+                    console.log("MAL");
+                },
+                dataType: 'json'
+            });   
+            
+            // On click 'continuar', it makes a request to save the users selected measurements as favourite
+            $("#continuar").on("click", function() {
+                event.preventDefault();
+                var formData = {};
+                formData["measurementsCode"] = aSeleccion;
+                
+                $.ajax({
+                    url: 'http://127.0.0.1:8000/api/measurements/favourite',
+                    type: 'POST',
+                    headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+                    data: formData,
+                    beforeSend: function () {
+                    },
+                    success: function (respuesta) {
+                        window.location = "home.html";
+                    },
+                    error: function(respuesta) {
+                        $('#response').html('Tienes que seleccionar alguna medición para continuar');
+                    },
+                    dataType: 'json'
+                });
+            })
+        });
+
+        // Function to create the available measurements
+        function crearMediciones(mediciones) {
+            for (let i = 0; i < mediciones.length; i++) {
+                sMedicion = `<div id="${mediciones[i].code}" class="draggable p-2 m-2 rounded">${mediciones[i].name}</div>`;
+                if (mediciones[i].favourite) {
+                    aSeleccion.push(mediciones[i].code);
+                    $("#selected").append(sMedicion)
+                } else {
+                    $("#availables").append(sMedicion)
+                }
+            }
+
+            // JQuery drag-drop logic
+            $(".draggable").draggable({ cursor: "move", revert: "invalid"});
+
+            // On 'drop' on '#selected' container, the measurement saves as favourite temporary.
+            // On 'out' of '#selected' container, the measurement is removed from the favourites.
+            $("#selected").droppable({
+                accept: ".draggable",
+                drop: function(event, ui) {                
+                    $(this).removeClass("border-warning");
+                    var dropped = ui.draggable;
+                    var droppedOn = $(this);
+                    $(dropped).detach().css({top: 0,left: 0}).appendTo(droppedOn);  
+                    aSeleccion.push(dropped.attr("id"));
+                },
+                over: function(event, elem) {
+                    $(this).addClass("border-warning");
+                },
+                out: function(event, elem) {
+                    $(this).removeClass("border-warning");
+                    var exited = elem.draggable;
+                    iPosition = aSeleccion.indexOf(exited.attr("id"));                    
+                    aSeleccion.splice(iPosition, 1);
+                }
+            });
+
+            $("#availables").droppable({
+                accept: ".draggable",
+                drop: function(event, ui) {                
+                    $(this).removeClass("border-warning");
+                    var dropped = ui.draggable;
+                    var droppedOn = $(this);
+                    $(dropped).detach().css({top: 0,left: 0}).appendTo(droppedOn);
+                },
+                over: function(event, elem) {
+                    $(this).addClass("border-warning");
+                },
+                out: function(event, elem) {
+                    $(this).removeClass("border-warning");
+                }
+            });
+        }        
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js" integrity="sha384-q2kxQ16AaE6UbzuKqyBE9/u/KzioAlnx2maXQHiDX9d4/zp8Ok3f+M7DPm+Ib6IU" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.min.js" integrity="sha384-pQQkAEnwaBkjpqZ8RU1fF1AKtTcHJwFl3pblpTlHXybJjHpMYo79HY3hIi4NKxyj" crossorigin="anonymous"></script>
+</body>
+</html>

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Euskalmeteo - Mapa</title>
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+    <!-- JQuery -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+    integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+    crossorigin=""/>
+    <!-- Make sure you put this AFTER Leaflet's CSS -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
+    integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
+    crossorigin=""></script>
+    <style>
+        body {
+            background-image: url("Images/Tierra.jpg");
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="home.html">
+                <img src="Images/Icon.png" alt="" width="30" class="d-inline-block align-top">
+                Euskalmeteo
+            </a>
+        </div>
+    </nav>
+
+    <!-- Container -->    
+    <div class="container-fluid">      
+        <div class="row my-5">
+            <div class="col-12 text-center mt-5 mb-3">
+                <h2 class="text-white">Selecciona los puntos que te interesen</h2>
+            </div>
+            <div class="col-12 d-flex justify-content-center">
+                <div id="mapid" style="width: 80%; height: 60vh;"></div>
+            </div>
+            <div class="col-12 text-center my-3">
+                <button id="continuar" type="submit" class="btn btn-primary my-4">Continuar</button>
+                <br>
+                <small id="response"></small>
+            </div>
+        </div>         
+    </div>   
+
+    <script>      
+        // Request to know if the user is authenticated. If we are not authenticated, it sends us to 'error' site
+        $.ajax({
+            url: 'http://127.0.0.1:8000/api/auth',
+            type: 'GET',
+            headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+            beforeSend: function () {
+            },
+            success: function (respuesta) {
+            },
+            error: function(respuesta) {
+                window.location = "error.html";
+                console.log("No se ha podido obtener si el usuario tiene balizas y mediciones favoritas.");
+            },
+            dataType: 'json',
+            async: false
+        });   
+        
+        // Array where favourite markers will save temporary
+        var aSeleccion = [];
+
+        $(document).ready(function() {
+            // Request to get all available markers and create the map
+            $.ajax({
+                url: 'http://127.0.0.1:8000/api/markers',
+                type: 'GET',
+                headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+                beforeSend: function () {
+                },
+                success: function (respuesta) {
+                    crearMapa(respuesta);
+                },
+                error: function(respuesta) {
+                    console.log("MAL");
+                },
+                dataType: 'json'
+            });
+
+            // On click 'continuar', it makes a request to save the users selected markers as favourite
+            $("#continuar").on("click", function() {
+                event.preventDefault();
+                console.log(aSeleccion);
+                var formData = {};
+                formData["markersCode"] = aSeleccion;
+
+                $.ajax({
+                    url: 'http://127.0.0.1:8000/api/markers/favourite',
+                    type: 'POST',
+                    headers: {"Authorization": 'Bearer ' + sessionStorage.getItem('token')},
+                    data: formData,
+                    beforeSend: function () {
+                    },
+                    success: function (respuesta) {
+                        window.location = "home.html";
+                    },
+                    error: function(respuesta) {
+                        $('#response').html('Tienes que seleccionar algún punto para continuar');
+                    },
+                    dataType: 'json'
+                });
+            });
+        });
+
+        // Function to create Euskadi's map
+        function crearMapa(markers) {
+            // Create the map
+            var map = L.map('mapid').setView([43.08, -2.64], 9);
+
+            // Add the title
+            L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw', {
+                maxZoom: 18,
+                attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
+                    'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+                id: 'mapbox/streets-v11',
+                tileSize: 512,
+                zoomOffset: -1
+            }).addTo(map);
+
+            // Add all the markers
+            for (let index = 0; index < markers.length; index++) {
+                sPopup = createPopup(markers[index]);
+                x = markers[index].x;
+                y = markers[index].y;
+
+                // Create the marker with its attributes
+                var markerLocation = new L.LatLng(y, x);
+                var marker = new L.Marker(markerLocation, {riseOnHover: true});
+                map.addLayer(marker);            
+                marker.bindPopup(sPopup);    
+
+                // If the marker is favorurite, it is green, if not it is blue
+                if (markers[index].favourite) {
+                    marker.setIcon(greenIcon());
+                    aSeleccion.push(markers[index].code);
+                } else {
+                    marker.setIcon(blueIcon());
+                }
+
+                // On clic a marker, it shows its popup and it saves/deletes as favourite
+                marker.on('click', getMarker);    
+                marker.on('click', function (e) {
+                    this.openPopup();
+                });    
+
+                // On marker hover, it shows its popup
+                marker.on('mouseover', function (e) {
+                    this.openPopup();
+                });
+                marker.alt = markers[index].code;
+            }
+        }       
+
+        // Function to create a markers popup
+        function createPopup(marker) {
+            return "Nombre: " + marker.name +
+                "<br>Municipio: " + marker.municipality +
+                "<br>Longitud: " + marker.x +
+                "<br>Latitud: " + marker.y +
+                "<br>Altitud: " + marker.altitude + " m." 
+        }
+
+        // Function to save/delete a marker as favourite
+        function getMarker(e) {
+            code = this.alt;
+            if (aSeleccion.includes(code)) {
+                iPosition = aSeleccion.indexOf(code);
+                aSeleccion.splice(iPosition, 1);
+                this.setIcon(blueIcon());
+            } else {
+                aSeleccion.push(code);
+                this.setIcon(greenIcon());
+            }        
+        }
+
+        // Fuction to get a green icon for the marker
+        function greenIcon()  {
+            return new L.Icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            });
+        }
+        
+        // Fuction to get a green icon for the marker
+        function blueIcon()  {
+            return new L.Icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            });
+        }        
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js" integrity="sha384-q2kxQ16AaE6UbzuKqyBE9/u/KzioAlnx2maXQHiDX9d4/zp8Ok3f+M7DPm+Ib6IU" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.min.js" integrity="sha384-pQQkAEnwaBkjpqZ8RU1fF1AKtTcHJwFl3pblpTlHXybJjHpMYo79HY3hIi4NKxyj" crossorigin="anonymous"></script>
+</body>
+</html>
